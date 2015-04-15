@@ -2,7 +2,71 @@
 
 
 angular.module('ngDreamFactory', [])
-    .service('DreamFactory', ['DSP_URL', 'DSP_API_KEY', '$http', '$q', '$rootScope', function(DSP_URL, DSP_API_KEY, $http, $q, $rootScope) {
+    .factory('interceptor', ['$q','$location', '$timeout',function($q,$location, $timeout) {
+
+        return {
+            request: function (config) {
+                return config;
+            },
+            requestError: function (result) {
+                return result;
+            },
+            response: function (result) {
+                return result;
+            },
+            responseError: responseError
+        };
+
+
+        function responseError(rejection){
+
+            if(rejection.config.url.indexOf('rest') > 0){
+
+                var a = rejection.config.url.indexOf('rest');
+                var url = rejection.config.url.substring(0, a) + 'rest/user/session';
+
+                var jqxhr = $.ajax({
+                    url: url,
+                    type: "GET",
+                    headers: {
+                        "X-DreamFactory-Application-Name": rejection.config.headers['X-DreamFactory-Application-Name'],
+                        "X-DreamFactory-Session-Token": rejection.config.headers['X-DreamFactory-Session-Token']
+                    },
+                    beforeSend: function(){
+                        if(rejection.status !== 403){
+                            return false;
+                        }
+                    }
+                })
+                .success(function(data) {
+                    if(data.session_id === ''){
+                        rejection.status = 401;
+
+                        if(rejection.hasOwnProperty('data'))
+                            rejection.data.error[0].code = 401
+
+                        return $q.reject(rejection);
+                    }
+                })
+                .error(function(data) {
+
+                })
+                .complete(function(data) {
+                    return $q.reject(rejection);
+                });
+
+                jqxhr.done(function(data) {
+                    return $q.reject(rejection);
+                });
+            }
+
+            return $q.reject(rejection);
+        }
+    }])
+    .config(['$httpProvider', function($httpProvider) {
+        $httpProvider.interceptors.push('interceptor');
+    }])
+    .service('DreamFactory', ['DSP_URL', 'DSP_API_KEY', '$http', '$q', '$rootScope', '$timeout', function(DSP_URL, DSP_API_KEY, $http, $q, $rootScope, $timeout) {
 
 
         // swagger.js
@@ -1542,7 +1606,6 @@ angular.module('ngDreamFactory', [])
 
         AngularHttpClient.prototype.execute = function(obj) {
 
-            // console.log('angular client func');
 
             if (obj.url.lastIndexOf('api_docs') == '-1' && obj.httpClient.promises) {
 
